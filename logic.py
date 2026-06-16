@@ -109,10 +109,72 @@ def calculate_topo(tasks, edges):
 
     task_map = {t['id']: t for t in tasks}
 
-    return "\n".join([
-    f"{i+1}. [{task_map[t]['date']}] (P{task_map[t].get('priority',0)}) {task_map[t]['name']}"
-    for i, t in enumerate(result)
-])
+    return result
+
+def build_topo_output(tasks, result):
+
+    task_map = {t["id"]: t for t in tasks}
+
+    output = []
+
+    for i, task_id in enumerate(result):
+
+        task = task_map[int(task_id)]
+
+        output.append(
+            f"{i+1}. [{task['date']}] "
+            f"(P{task.get('priority',0)}) "
+            f"{task['name']}"
+        )
+
+    return "\n".join(output)
+
+def build_schedule_data(tasks, result_ids):
+
+    task_map = {t["id"]: t for t in tasks}
+
+    rows = []
+
+    for i, task_id in enumerate(result_ids, start=1):
+
+        task = task_map[int(task_id)]
+
+        rows.append(
+            (
+                i,
+                task["date"],
+                task["name"],
+                task.get("priority", 0)
+            )
+        )
+
+    return rows
+
+def standardize_import_data(new_data):
+
+    standardized_tasks = []
+
+    for item in new_data:
+
+        t_id = item.get('id') if item.get('id') is not None else item.get('ID')
+
+        t_name = item.get('name') or item.get('Name') or item.get('Tên công đoạn')
+
+        t_dur = item.get('duration') or item.get('Duration') or item.get('Thời gian (h)')
+
+        t_date = item.get('date') or item.get('Date') or item.get('Ngày thực hiện')
+
+        if t_id is not None and t_name:
+
+            standardized_tasks.append({
+                "id": int(t_id),
+                "name": str(t_name),
+                "duration": int(t_dur) if t_dur else 0,
+                "date": str(t_date) if t_date else "01/01/2026",
+                "priority": int(item.get("priority", 0))
+            })
+
+    return standardized_tasks
 
 # Thêm 2 hàm này để fix lỗi ImportError ở main.py
 def save_data(tasks, edges):
