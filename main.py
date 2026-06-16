@@ -1,10 +1,14 @@
-
+#main.py
 import tkinter as tk
 from tkinter import messagebox, ttk
 from tkcalendar import DateEntry
 from cauhinh import *
 from logic import *
-from logic import calculate_topo, save_data, load_data, export_to_excel, export_to_word, import_from_file, update_task, delete_task
+from logic import (calculate_topo,
+save_data, load_data, 
+export_to_excel, export_to_word, import_from_file, 
+update_task, delete_task, 
+build_topo_output, build_schedule_data, standardize_import_data)
 from datetime import datetime
 
 tasks = []
@@ -18,13 +22,10 @@ def show_scheduler():
     main_interface()
 
 def show_contact():
-    messagebox.showinfo("Thông tin liên hệ", 
-                        "Người tạo: Lâm Bảo Ngọc Hiếu\n"
-                        "MSSV: 0023410958\n\n"
-                        "Đồ án: Cài đặt chương trình Lập lịch sản xuất trong nhà máy, ứng dụng giải thuật sắp xếp Tôpô\n"
-                        "Sản phẩm: Phần mềm Lập lịch Sản xuất v1.0\n\n"
-                        "Email: 0023410958@student.dthu.edu.vn\n"
-                        "Hotline: 0969 8345 18\n")
+    messagebox.showinfo(
+        "Thông tin liên hệ",
+        CONTACT_INFO
+    )
 
 def back_to_home(sidebar, main_content):
     """Quay lại trang chủ"""
@@ -74,50 +75,77 @@ def handle_add_relation():
 
 def handle_topo():
     result = calculate_topo(tasks, edges)
+    print("RESULT =", result)
+    print(type(result))
+
+    print("RESULT =", repr(result))
+    print("TASKS =", tasks)
+    print("EDGES =", edges)
 
     topo_text.delete("1.0", tk.END)
 
+    from tkinter import messagebox
+
+    if result == "Trống":
+        messagebox.showinfo("Thông báo","Chưa có công việc nào!")
+        return
+
     if result is None:
-        topo_text.insert(tk.END, "LỖI: Có chu trình!")
-    else:
-        topo_text.insert(tk.END, "THỨ TỰ:\n" + str(result))
+        messagebox.showerror("Lỗi","Đồ thị có chu trình!")
+        return
+
+    text_result = build_topo_output(tasks, result)
+
+    topo_text.insert(tk.END,"THỨ TỰ:\n\n" + text_result)
+
+    refresh_schedule(result)
 
 def refresh_table():
     for item in tree.get_children(): tree.delete(item)
-    for t in tasks: tree.insert("", tk.END, values=(t["id"], t["name"], f"{t['duration']} h", t["date"], t.get("priority", 0)))
+    for t in tasks: tree.insert("", tk.END, values=(t["id"], t["name"], f"{t['duration']} phút", t["date"], t.get("priority", 0)))
+
+def refresh_schedule(result_ids):
+    global schedule_tree
+
+    print("NHẬN ĐƯỢC:", result_ids)
+
+    # Kiểm tra schedule_tree có tồn tại không
+    print("SCHEDULE TREE =", schedule_tree)
+
+    for item in schedule_tree.get_children():
+        schedule_tree.delete(item)
+
+    rows = build_schedule_data(tasks, result_ids)
+
+    for row in rows:
+        schedule_tree.insert("", tk.END, values=row
+    )
+
+    print("SO DONG =", len(schedule_tree.get_children()))
 
 def clear_form():
     entry_id.delete(0, tk.END); entry_name.delete(0, tk.END); entry_time.delete(0, tk.END)
 
-
 def handle_import():
-    global tasks
+    global tasks, edges
     new_data = import_from_file() # Gọi hàm từ logic.py
     if new_data:
         try:
-            standardized_tasks = []
-            for item in new_data:
-                # Chuẩn hóa: Tự động tìm cột dù viết hoa hay viết thường
-                # Lấy ID (chấp nhận cả 'id' hoặc 'ID')
-                t_id = item.get('id') if item.get('id') is not None else item.get('ID')
-                # Lấy Tên (chấp nhận 'name', 'Name', 'Tên công đoạn'...)
-                t_name = item.get('name') or item.get('Name') or item.get('Tên công đoạn')
-                # Lấy Thời gian
-                t_dur = item.get('duration') or item.get('Duration') or item.get('Thời gian (h)')
-                # Lấy Ngày
-                t_date = item.get('date') or item.get('Date') or item.get('Ngày thực hiện')
-                # Chỉ thêm nếu có ít nhất ID và Tên
-                if t_id is not None and t_name:
-                    standardized_tasks.append({
-                        "id": int(t_id),
-                        "name": str(t_name),
-                        "duration": int(t_dur) if t_dur else 0,
-                        "date": str(t_date) if t_date else "01/01/2026",
-                        "priority": int(item.get("priority", 0))
-                    })
+            standardized_tasks = standardize_import_data(new_data)
+
             if standardized_tasks:
+
+                edges.clear()      # Xóa các quan hệ cũ
+
                 tasks = standardized_tasks
+
+                print("TASKS =", tasks)
+                print("EDGES =", edges)
+
                 refresh_table()
+
+                messagebox.showinfo("Thành công", f"Đã nhập {len(tasks)} công đoạn!"
+    )
                 messagebox.showinfo("Thành công", f"Đã nhập {len(tasks)} công đoạn!")
             else:
                 messagebox.showwarning("Lỗi", "Không tìm thấy dữ liệu hợp lệ trong file!")
@@ -187,7 +215,7 @@ def handle_update():
                 tree.item(selected, values=(
                     t["id"],
                     t["name"],
-                    f"{t['duration']} h",
+                    f"{t['duration']} phút",
                     t["date"],
                     t["priority"]
                 ))
@@ -234,7 +262,7 @@ def main_interface():
     f = tk.Frame(sidebar, bg=COLOR_SIDEBAR); f.pack(pady=10, padx=20, fill="x")
     tk.Label(f, text="ID:", bg=COLOR_SIDEBAR).pack(anchor="w")
     entry_id = tk.Entry(f, bd=1, relief="solid"); entry_id.pack(fill="x", pady=2)
-    tk.Label(f, text="Tên:", bg=COLOR_SIDEBAR).pack(anchor="w")
+    tk.Label(f, text="Tên công đoạn:", bg=COLOR_SIDEBAR).pack(anchor="w")
     entry_name = tk.Entry(f, bd=1, relief="solid"); entry_name.pack(fill="x", pady=2)
     tk.Label(f, text="Thời gian:", bg=COLOR_SIDEBAR).pack(anchor="w")
     entry_time = tk.Entry(f, bd=1, relief="solid"); entry_time.pack(fill="x", pady=2)
@@ -275,7 +303,7 @@ def main_interface():
     
     tree = ttk.Treeview(main_content, columns=("id", "name", "time", "date", "priority"), show="headings")
     tree.heading("id", text="ID"); 
-    tree.heading("name", text="Tên"); 
+    tree.heading("name", text="Tên Công Đoạn"); 
     tree.heading("time", text="Thời gian")
     tree.heading("date", text="Ngày thực hiện")
     tree.heading("priority", text="Ưu tiên")
@@ -298,7 +326,7 @@ def main_interface():
 
     topo_text = tk.Text(
         topo_frame,
-        height=20,   # 🔥 giữ nguyên chiều cao như cũ
+        height=12,   # 🔥 giữ nguyên chiều cao như cũ
         wrap="word",
         yscrollcommand=scrollbar.set
     )
@@ -306,6 +334,38 @@ def main_interface():
 
     scrollbar.config(command=topo_text.yview)
 
+# ======================
+# THỜI KHÓA BIỂU SẢN XUẤT
+# ======================
+
+    tk.Label(
+        main_content,
+        text="📅 THỜI KHÓA BIỂU SẢN XUẤT",
+        font=("Arial", 12, "bold"),
+        bg=COLOR_BG
+).pack(pady=(10, 5))
+
+    global schedule_tree
+
+    schedule_tree = ttk.Treeview(
+        main_content,
+        columns=("stt", "date", "task", "priority"),
+        show="headings",
+        height=20
+)
+
+    schedule_tree.heading("stt", text="STT")    
+    schedule_tree.heading("date", text="Ngày")
+    schedule_tree.heading("task", text="Công đoạn")
+    schedule_tree.heading("priority", text="Ưu tiên")
+
+    schedule_tree.column("stt", width=60, anchor="center")
+    schedule_tree.column("date", width=120, anchor="center")
+    schedule_tree.column("task", width=400, anchor="w")
+    schedule_tree.column("priority", width=80, anchor="center")
+
+    schedule_tree.pack(fill="x", pady=10)
+    
     # Xuất/Nhập file
     file_frame = tk.LabelFrame(sidebar, text="📁 TỆP TIN", bg=COLOR_SIDEBAR, padx=10, pady=10)
     file_frame.pack(fill="x", padx=20, pady=10)
@@ -331,9 +391,9 @@ root.configure(bg=COLOR_PRIMARY)
 home_frame = tk.Frame(root, bg=COLOR_BG)
 home_frame.pack(expand=True, fill="both")
 
-tk.Label(home_frame, text="PHẦN MỀM LẬP LỊCH SẢN XUẤT V1.0", 
+tk.Label(home_frame, text=HOME_TITLE, 
          font=("Arial", 26, "bold"), bg=COLOR_BG, fg=COLOR_PRIMARY).pack(pady=(120, 10))
-tk.Label(home_frame, text="Giải pháp tối ưu hóa dây chuyền dựa trên Sắp xếp Tôpô", 
+tk.Label(home_frame, text=HOME_SUBTITLE, 
          font=("Arial", 13), bg=COLOR_BG, fg=COLOR_TEXT).pack(pady=(0, 60))
 
 # Khung nút bấm chính
